@@ -1,0 +1,269 @@
+```{r, include = F, message = F}
+# We can hide our set up code chunk using the "echo = FALSE" option. 
+# We can make sure no messages pop up by adding "message = FALSE".
+# Include = FALSE doesn't show the code OR the output
+
+# Load libraries we need
+library(tidyverse)
+library(kableExtra)
+
+# Get the API ready to access data
+source("code/VecDyn_Dataset_Access.R")
+
+# Get data sets
+list_of_dataframes <- searchDatasets("Suffolk Virginia mosquito control")
+```
+
+```{r, echo=FALSE}
+######## Data Cleaning ##########
+
+# Collapse the datasets into one dataset
+mosqDF <- data.frame()
+
+for (i in 1:length(list_of_dataframes)) {
+  
+  df <- list_of_dataframes[[i]]
+  
+  mosqDF <- rbind(mosqDF, df)
+  
+}
+
+# Make sure date is a date variable
+mosqDF$sample_start_date <- ymd(mosqDF$sample_start_date)
+
+# Combine observations from the same date
+mosqDFcomb <- mosqDF %>% 
+  group_by(sample_start_date) %>%
+  summarize(totalMos = sum(sample_value))
+
+# Add year and month variables
+mosqDFcomb$month <- month(mosqDFcomb$sample_start_date)
+mosqDFcomb$year <- year(mosqDFcomb$sample_start_date)
+```
+
+```{r, eval = F, echo = F}
+# The eval = F option prevents this chunk from running when we render the document.
+# You can use this to turn optional data filters on and off. Try setting eval = T
+# and see how the report changes.
+
+mosqDFcomb <- mosqDFcomb %>% filter(year > 2015)
+
+```
+
+## Background
+
+In this section, you can write some background information to set up the rest of the report. This file is set up to help you explore how you can create reports that re-generate automatically when new data are introduced. We will explore ways that you can show or hide code as needed. You will use some of the concepts from the time-dependent regression practical into the report to see how it works.
+
+In this section, we might want to tell the reader what kind of data we are looking at. For example, we might want to tell readers about the time frame represented in the data set and how many data points we have so far. For example:
+
+This report includes mosquito abundance data collected by the Suffolk Virginia Mosquito Control group. It spans `r .QuartoInlineRender(length(unique(mosqDFcomb$year)))` years, from `r .QuartoInlineRender(min(mosqDFcomb$year))` to `r .QuartoInlineRender(max(mosqDFcomb$year))`. The data set contains a total of `r .QuartoInlineRender(nrow(mosqDFcomb))` collection days and `r .QuartoInlineRender(nrow(mosqDF))` unique collections.
+
+**Add at least one more sentence to this section using inline code.**
+
+## Data Summaries
+
+In this section, we will display a table of the summary statistics. We will format it nicely instead of leaving it as is.
+
+```{r, echo = FALSE}
+
+# Make an empty table to print later
+summaryDat <- data.frame(year = numeric(0),
+                         n = numeric(0),
+                         mean = numeric(0),
+                         median = numeric(0),
+                         min = numeric(0), 
+                         max = numeric(0),
+                         outliers = numeric(0))
+
+mosqYears <- unique(mosqDFcomb$year)
+
+# Get the summary statistics for each year
+for (i in 1:length(mosqYears)) {
+  
+  df <- mosqDFcomb %>% filter(year == mosqYears[i])
+  year <- df$year[1]
+  n <- nrow(df)
+  mean <- mean(df$totalMos, na.omit = T)
+  median <- median(df$totalMos, na.omit = T)
+  min <- min(df$totalMos, na.omit = T)
+  max <- max(df$totalMos, na.omit = T)
+  outliers <- length(boxplot.stats(mosqDFcomb$totalMos)$out) # Note there are other ways to find outliers
+  
+  
+  sumDF <- c(year, n, mean, median, min, max, outliers)
+  
+  summaryDat[i, ] <- sumDF
+
+}
+```
+
+**This table is a very simple version of what is possible. If you want, research the kableExtra package and see if you can add some simple customizations to this table to make it look nicer.**
+
+```{r, echo = F}
+kable(summaryDat, caption = "Summary statistics by year")
+
+```
+
+## Data Exploration
+
+In this section, we will visualized the raw and summarized collection data. In the raw data, we can easily see that data collection occurs seasonally. In other words, we have gaps in the data that we will need to deal with if we decide to model theses data.
+
+```{r, echo = F}
+ggplot(mosqDFcomb, aes(x = sample_start_date, y = totalMos))+
+         geom_point()
+```
+
+Using summary statistics can help us visualize big picture patterns better. We can use the mean and median to see how they differ.
+
+```{r, echo = F}
+# Make a quick plot of the mean abundance
+colors <- c("median" = "blue", "mean" = "red")
+
+ggplot(summaryDat, aes(x = year, y = mean))+
+  geom_line(aes(color = "mean"))+
+  geom_point(aes(color = "mean"))+
+  geom_line(aes(y = median, color = "median"))+
+  geom_point(aes(y = median, color = "median"))+
+  theme_bw()+
+  scale_color_manual(
+    name = "Statistic",
+    values = colors)+
+  labs(x = "Year", y = "Mean Abundance",
+       title = "Mean and Median Abundance by Year")
+
+```
+
+The year `r .QuartoInlineRender(summaryDat$year[which.max(summaryDat$mean)])` had the highest average mosquito abundance, with an average of `r max(summaryDat$mean)` mosquitoes observed. The year `r .QuartoInlineRender(summaryDat$year[which.max(summaryDat$outliers)])` had the most outlier abundance observations. There were `r .QuartoInlineRender(length(boxplot.stats(mosqDFcomb$totalMos)$out))` total outliers in the data set.
+
+**Make one more plot that might be interesting and add some text to describe it using inline code**
+
+## Model Fitting
+
+We are going to fit a simple model to these data and look at the results. Note that there are gaps in these data, so our typical time series models may have trouble. However, we can collapse the data by month and impute 0s where collections did not occur (presumably because mosquitoes were absent or very nearly so). Then we can fit some simple time series models. Here, we will clean the data in secret but we will display the model fitting code to our readers (using echo = T) for full transparency.
+
+```{r, include = F}
+# include = FALSE prevents the code and the output from being displayed, but
+# the code chunk is still evaluated.
+
+# Data Cleaning
+
+# Aggregate the totals by month
+mosqMonth <- mosqDFcomb %>% group_by(month, year) %>% summarize(totalMos = sum(totalMos)) %>% ungroup()
+
+# See what months are in the data set
+unique(mosqMonth$month)
+
+# Expand the data to include all months in the range
+mosqMonth <- mosqMonth %>%
+  complete(month = 1:12 , nesting(year), fill = list(totalMos = 0)) %>%
+  arrange(year, month)
+
+# Add date column
+mosqMonth <- mosqMonth %>% 
+  mutate(date = make_date(year = year, month = month))
+```
+
+Here are the aggregated data with zeros imputed for months where collections did not occur.
+
+```{r, echo = F}
+
+ggplot(data = mosqMonth, aes(x = date, y = totalMos))+
+  geom_line()+
+  geom_point()
+
+```
+
+We can look at an autocorrelation function plot like we did in our examples to see if there is consistent autocorrelation between observations. It looks like the strongest correlations are with the 6- and 12-month lags.This suggests there is likely an annual pattern of fluctuation. We already saw that from the last graph as well.
+
+```{r, echo = F}
+
+acf(mosqMonth$totalMos)
+
+```
+
+```{r, echo = F}
+
+# Add a general time counter variable
+mosqMonth$time <- 1:nrow(mosqMonth)
+
+# Add sine and cosine seasonality terms - k = 12 because t is in months
+mosqMonth$sinSeason <- sin((2*pi*mosqMonth$time)/12)
+mosqMonth$cosSeason <- cos((2*pi*mosqMonth$time)/12)
+
+# Add lagged predictors
+mosqMonth$totalMos_lag1 <- lag(mosqMonth$totalMos, 1)
+
+# Remove new NAs
+mosqMonth <- mosqMonth %>% na.omit(totalMos_lag1)
+```
+
+**There are two versions of the model to try out. Change the include and eval options on the code chunks and see how the rendered report differs.**
+
+**Advanced option: try fitting your own model**
+
+```{r, include = F, eval = F}
+mosqMod <- lm(totalMos ~ time + totalMos_lag1 + sinSeason + cosSeason,
+              data = mosqMonth)
+
+summary(mosqMod)
+
+```
+
+```{r, include = T, eval = T}
+
+mosqMonth$month <- as.factor(mosqMonth$month)
+
+mosqMod <- lm(totalMos ~ time + totalMos_lag1 + month ,
+              data = mosqMonth)
+
+summary(mosqMod)
+
+```
+
+**In a true report, we might want to write some text here about the kind of model we fitted to accompany our code. Try that out here to practice communicating about models.**
+
+### Residual Diagnostics
+
+The residual plots show that having 0 abundance during certain months consistently causes a problem for our model. Think of some other ways we could approach modeling these data that would alleviate this problem.
+
+```{r, echo = F}
+hist(mosqMod$residuals)
+
+plot(predict(mosqMod), mosqMod$residuals)
+
+acf(mosqMod$residuals)
+
+```
+
+### Model Performance
+
+Here is a plot of the model predictions overlaid on the actual observations. The model $R^2$ was `r .QuartoInlineRender(round(summary(mosqMod)$r.squared, 2))`, which means that `r .QuartoInlineRender(round(summary(mosqMod)$r.squared*100, 0))`% of the variation in the data was explained by the model.
+
+```{r, echo = F}
+mosqMonth$pred <- predict(mosqMod)
+
+colors2 <- c("actual" = "black", "predicted" = "purple")
+
+ggplot(data = mosqMonth, aes(x = date, y = totalMos))+
+  geom_line(aes(color = "actual"))+
+  geom_point(aes(color = "actual"))+
+  geom_line(aes(y = pred, color = "predicted"), linewidth = 1.5,
+            alpha = 0.3)+
+  scale_color_manual(
+    name = "Color",
+    values = colors2)+
+  theme_bw()+
+  labs(x = "Time", y = "Total Abundance")
+
+```
+
+## Conclusions and Limitations
+
+It is always good to think about how our models do well and where they fall short to help make appropriate conclusions from the model. Depending on the model you chose to use, the strengths and limitations will be different.
+
+**Take a minute and write about how the model did well and where we could improve or should at least use caution in trusting its conclusions. Try using some inline code to allow the report to be flexible. For example, `r .QuartoInlineRender(length(mosqMonth$pred[mosqMonth$pred < 0]))` of the predictions were below zero, which is not possible in reality.**
+
+## Challenge
+
+Using the skills you learned in the time-dependent covariate module, gather mean monthly temperature data for Suffolk, VA for the appropriate time frame and include temperature as a covariate in your model. Consider transforming the response variable (e.g., taking a square-root) to address non-homoskedastic elements of the data.
+
