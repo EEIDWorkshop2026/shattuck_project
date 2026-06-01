@@ -93,12 +93,13 @@ save(mosq_site, file = "code/mosq_site.Rsave")
 
 ## Background
 
-This report includes *Aedes albopictus* and *Ae. aegypti* abundance data collected by the Orange County Florida Mosquito Control group. These data are from `{r} length(unique(mosq_site$year))` year(s) and span months `{r} min(mosq_site$month, na.rm = TRUE)` to `{r} max(mosq_site$month, na.rm = TRUE)`.
+This report includes *Aedes albopictus* and *Ae. aegypti* abundance data collected by the Orange County Florida Mosquito Control group using CDC light traps. These data are from `{r} length(unique(mosq_site$year))` and span months `{r} min(mosq_site$month, na.rm = TRUE)` to `{r} max(mosq_site$month, na.rm = TRUE)`.
 
 The dataset contains a total of `{r} mosq_site %>% filter(species == "albopictus") %>% summarise(total = sum(sample_value, na.rm = TRUE)) %>% pull(total)` *Ae. albopictus* collected and `{r} mosq_site %>% filter(species == "aegypti") %>% summarise(total = sum(sample_value, na.rm = TRUE)) %>% pull(total)` *Ae. aegypti* collected.
 
 A total of `{r} mosq_site %>% distinct(site_index) %>% nrow()` sites were sampled across the year. 
 
+Some field sites collected only one of the species, both, or neither. This county houses the city of Orlando, FL.
 
 ```{r, echo=FALSE, message=FALSE}
 # create a plot of all 72 sites
@@ -129,12 +130,23 @@ ggplot()+
   geom_sf(data=boundary_AEA,aes(geometry=geometry), fill="grey90",color="black")+
   geom_point(data=mosq_year,
               aes(x = sample_long_dd, y = sample_lat_dd, color = species_group), size = 1.5) +
-  labs(x = "Longitude", y = "Latitude")+
+  labs(x = "Longitude", y = "Latitude", color = "Species Presence")+
   theme_minimal() + 
-  theme(legend.position = c(.9, .9))
+  theme(legend.position = c(.9, .9))+
+  theme(legend.position = "right",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_text(size = 15),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        legend.text = element_text(size = 13),
+        legend.title = element_text(size = 13))
 ```
 
-
+Site sampling occurred fairly consistently throughout the year at over half the sites included in the data set. Calendar week two was the only week the had consistent gaps in sampling which would warrant further inquiry if we were to use this data set in the future. 
 
 ```{r, echo=FALSE, , message=FALSE}
 # plot to explore the number of sites that were sampled across weeks
@@ -208,6 +220,7 @@ ggplot(mosq_week_binned, aes(x = week, y = site_index, fill = totalMos_bin)) +
 
 ```
 
+As every site was not consistently sampled across the entire year, we adjusted mosquito abundance to include sampling effort to explore trends in mosquito populations in the traps across the year. 
 
 ```{r, echo=FALSE, message=FALSE}
 #explore total mosquito abundance across our sites for albo and aegypti
@@ -241,6 +254,27 @@ ggplot(mosq_week_total, aes(x = week, y = mos_per_trap, color = species)) +
   theme_minimal() +
   theme(
     panel.grid.minor = element_blank()
-  )
+  )+
+  theme(legend.position = "right",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_text(size = 15),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        legend.text = element_text(size = 13),
+        legend.title = element_text(size = 13))
+  
 
 ```
+
+
+```{r}
+load("site_imp.Rdata")
+
+
+```
+
+
