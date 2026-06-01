@@ -270,9 +270,52 @@ ggplot(mosq_week_total, aes(x = week, y = mos_per_trap, color = species)) +
 
 ```
 
+We pulled the percent of impervious surface at a 100m buffer around each site from the Multi-Resolution Land Characteristics Annual National Land Cover Database (NLCD) for our sampling year. We compared the average impervious surface across our four categories of sites.  
 
-```{r}
+
+```{r, echo=FALSE, , message=FALSE}
 load("site_imp.Rdata")
+
+mosq_year <- mosq_site %>% 
+  group_by(site_index, sample_long_dd, sample_lat_dd) %>% 
+  summarise(
+    caught_albo = any(species == "albopictus" & sample_value > 0, na.rm = TRUE),
+    caught_aeg = any(species == "aegypti" & sample_value > 0, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% 
+  mutate(
+    species_group = case_when(
+      caught_albo & caught_aeg  ~ "Both species",
+      caught_albo & !caught_aeg ~ "albopictus only",
+      !caught_albo & caught_aeg ~ "aegypti only",
+      TRUE                 ~ "Neither species"
+    )
+  )
+
+
+mosq_year_imp <- full_join(mosq_year, site_imp, by = "site_index")
+
+
+ggplot(mosq_year_imp, aes(x = species_group, y= mean_imp_.1km, fill = species_group))+
+  geom_boxplot()+
+   theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank()
+  )+
+  theme(legend.position = "none",
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        axis.text.x = element_text(size = 10),
+        axis.title.x = element_text(size = 15),
+        axis.text.y = element_text(size = 10),
+        axis.title.y = element_text(size = 15),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        legend.text = element_text(size = 13),
+        legend.title = element_text(size = 13))+
+  labs(
+    x = "Site Classification",
+    y = "% Impervious Surface (100m buffer)")
 
 
 ```
